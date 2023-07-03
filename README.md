@@ -1,4 +1,4 @@
-# sando-mev
+# sando-mev 🔍
 - This is the beginning of my journey experimenting with MEV sandwicher bots using  flashbot bundlers 🧱 
 ## Overview
 
