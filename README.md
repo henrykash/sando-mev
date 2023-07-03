@@ -1,5 +1,5 @@
 # sando-mev
-- This is the beginning of my journey experimenting with MEV sandwicher bots using a flashbot bundlers 🧱 
+- This is the beginning of my journey experimenting with MEV sandwicher bots using  flashbot bundlers 🧱 
 ## Overview
 
 The goal of this bot is to build an optimized searcher brick 🧱 by 🧱
