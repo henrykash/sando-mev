@@ -34,4 +34,5 @@ export const config = {
   WSS_URL: process.env.WSS_URL!, //websocket provider
 
   SEARCH_WALLET: "0x23055E68DAfC3670b20651BD0B2E0Bcd46977b22",// Used to send transactions, needs ether
+  PRIVATE_KEY: process.env.PRIVATE_KEY //signer private key used to sign transaction
 };
