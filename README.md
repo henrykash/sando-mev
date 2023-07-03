@@ -2,10 +2,11 @@
 - This is the beginning of my journey experimenting with MEV sandwicher bots using  flashbot bundlers 🧱 
 ## Overview
 
-The goal of this bot is to build an optimized searcher brick 🧱 by 🧱
- Phase ONE is just building a MONITORING SYSTEM. This bot contains:
+The goal of this bot is to build an optimized searcher, brick 🧱 by 🧱 .
 
-- reading data from the mempool
+ `PHASE ONE` is just building a `MONITORING SYSTEM`. This bot contains:
+
+- reading data from the mempool 🚧🚧
 - decode transaction data 🚧🚧
 - simple logging system
 - profit calculation algos
@@ -16,5 +17,5 @@ The goal of this bot is to build an optimized searcher brick 🧱 by 🧱
   - calculating next base fee
 
 # tech-stack
-- Typerscript
-- Ethersjs
+- `Typerscript`
+- `Ethersjs`
