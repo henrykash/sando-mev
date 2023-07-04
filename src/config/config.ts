@@ -1,4 +1,4 @@
-import { Logging } from "../error/logging";
+import { Logging } from "../logging/logging";
 import {ethers,  } from "ethers";
 
 let hasEnv = true;

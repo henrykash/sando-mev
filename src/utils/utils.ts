@@ -10,7 +10,7 @@ class Helpers {
     const delta = gasUsed.sub(targetGasUsed);
 
     const newBaseFee = basefee.add(
-      basefee.mul(delta).dev(targetGasUsed).div(ethers.BigNumber.from(8))
+      basefee.mul(delta).div(targetGasUsed).div(ethers.BigNumber.from(8))
     );
 
     //add 0-9 wei so it becomes a different hash each time
