@@ -4,11 +4,11 @@ import {ethers,  } from "ethers";
 let hasEnv = true;
 
 const ENV_VARS = [
-  "RPC_URL",
-  "RPC_URL_WSS",
-  "PRIVATE_KEY",
-  "FLASHBOTS_AUTH_KEY",
-  "SANDWICH_CONTRACT",
+  process.env.RPC_URL!,
+  process.env.RPC_URL_WSS!,
+  // "PRIVATE_KEY",
+  // "FLASHBOTS_AUTH_KEY",
+  // "SANDWICH_CONTRACT",
 ];
 
 for (let i = 0; i < ENV_VARS.length; i++) {
