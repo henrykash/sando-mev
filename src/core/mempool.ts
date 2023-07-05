@@ -4,20 +4,21 @@ import { Logging } from "../logging/logging";
 
 class mempool {
 
-   public _provider: providers.WebSocketProvider;
+   public _wsprovider: providers.WebSocketProvider;
     constructor() {
-     this._provider = new providers.WebSocketProvider("wss://mainnet.infura.io/ws/v3/b3e60763ede44fb0a1a195cd5e2e37ab");
+     this._wsprovider = new providers.WebSocketProvider(config.WSS_URL!);
 
     }
 
     public stremMempoolPendingTxns = async () => {
-        const stream = this._provider.on("pending", async (txHash) => 
-
-        await  this._provider.getTransaction(txHash).then((tx) => {
-            Logging.logInfo(txHash)
-
-        })
-      );
+        try {
+            this._wsprovider.on("pending", (txHash) => {
+            let receipt = this._wsprovider.getTransaction(txHash)
+                Logging.logInfo("pending txHash", {receipt});
+            });
+        } catch (error) {
+            Logging.logError(error);
+        }
     }
 }
 
