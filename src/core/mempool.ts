@@ -2,6 +2,7 @@ import { ethers, providers } from "ethers";
 import { config } from "../config/config";
 import { Logging } from "../logging/logging";
 import { UniswapV2RouterABI } from "../abi";
+import { METHODS } from "http";
 
 class mempool {
   private _wsprovider: providers.WebSocketProvider;
@@ -51,15 +52,20 @@ class mempool {
           gasLimit,
           targetHash
           
-        })
-
+        }) 
+    
+         // parse transaction data: https://docs.ethers.io/v5/api/utils/abi/interface/#Interface--parsing -->[helps in decoding the transaction data]
         const tx = this._uniswap.parseTransaction({
           data: txReceipt.data,
         }); 
+    
+        //distructure the tx data to get the method name and args
+        const {name: methodName,  args } = tx;
 
+        console.log({methodName, args})
 
         //some logic
-        
+
       } catch (error) {
         Logging.logError(error);
       }
