@@ -9,6 +9,10 @@ if (!process.env.RPC_URL || !process.env.WSS_URL ) {
 }
 
 export const config = {
+
+  SUPPORTED_ROUTERS: [
+    "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D", //uniswapV2 router contract
+  ],
   
   UNIV2_ROUTER: "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D", //uniswapV2 router contract
   SANDWICH: process.env.SANDWICH_CONTRACT!, // sandwhicher contract

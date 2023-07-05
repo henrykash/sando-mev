@@ -12,7 +12,6 @@
   "license": "ISC",
   "dependencies": {
     "@ethereumjs/tx": "^3.4.0",
-    "abi-decoder": "^2.4.0",
     "chalk": "^4.1.2",
     "dotenv": "^16.3.1",
     "ethers": "^5.5.2",
