@@ -11,14 +11,15 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "chalk": "^5.3.0",
+    "@ethereumjs/tx": "^3.4.0",
+    "chalk": "^4.1.2",
     "dotenv": "^16.3.1",
-    "typescript": "^5.1.6",
-    "ethers": "^5.5.2"
+    "ethers": "^5.5.2",
+    "node-fetch": "^3.1.0",
+    "typescript": "^5.1.6"
   },
   "devDependencies": {
     "@types/node": "^20.3.3",
     "ts-node-dev": "^2.0.0"
-
   }
 }

@@ -1,28 +1,18 @@
-import { Logging } from "../error/logging";
-import {ethers,  } from "ethers";
+import { Logging } from "../logging/logging";
 
-let hasEnv = true;
+require("dotenv").config();
 
-const ENV_VARS = [
-  "RPC_URL",
-  "RPC_URL_WSS",
-  "PRIVATE_KEY",
-  "FLASHBOTS_AUTH_KEY",
-  "SANDWICH_CONTRACT",
-];
-
-for (let i = 0; i < ENV_VARS.length; i++) {
-  if (!process.env[ENV_VARS[i]]) {
-    Logging.logError(`Missing env var ${ENV_VARS[i]}`);
-    hasEnv = false;
-  }
-}
-
-if (!hasEnv) {
+//check if all the required env variables are set
+if (!process.env.RPC_URL || !process.env.WSS_URL ) {
+  Logging.logFatal("RPC_URL or WSS_URL not set");
   process.exit(1);
 }
 
 export const config = {
+
+  SUPPORTED_ROUTERS: [
+    "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D", //uniswapV2 router contract
+  ],
   
   UNIV2_ROUTER: "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D", //uniswapV2 router contract
   SANDWICH: process.env.SANDWICH_CONTRACT!, // sandwhicher contract
