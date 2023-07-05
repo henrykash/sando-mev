@@ -8,9 +8,9 @@ The goal of this bot is to build an optimized searcher, brick 🧱 by 🧱 .
 
 - reading data from the mempool ✅✅
 - decode transaction data ✅✅
-- simple logging system
-- profit calculation algos
-- gas bribe calculation
+- simple logging system ✅✅
+- profit calculation algos 🚧🚧
+- gas bribe calculation 🚧🚧
 - bundle firing
 - misc
   - doing math in Typescript
