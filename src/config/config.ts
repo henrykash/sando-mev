@@ -2,9 +2,12 @@ import { Logging } from "../logging/logging";
 
 require("dotenv").config();
 
+// Accept either WSS_URL or the older RPC_URL_WSS name used in .env.example.
+const WSS_URL = process.env.WSS_URL ?? process.env.RPC_URL_WSS;
+
 //check if all the required env variables are set
-if (!process.env.RPC_URL || !process.env.WSS_URL ) {
-  Logging.logFatal("RPC_URL or WSS_URL not set");
+if (!process.env.RPC_URL || !WSS_URL) {
+  Logging.logFatal("RPC_URL or WSS_URL (a.k.a RPC_URL_WSS) not set");
   process.exit(1);
 }
 
@@ -21,7 +24,7 @@ export const config = {
   USDC: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" ,//usdc
 
   RPC_URL: process.env.RPC_URL!, // json rpc provider
-  WSS_URL: process.env.WSS_URL!, //websocket provider
+  WSS_URL: WSS_URL!, //websocket provider
 
   SEARCH_WALLET: "0x23055E68DAfC3670b20651BD0B2E0Bcd46977b22",// Used to send transactions, needs ether
   PRIVATE_KEY: process.env.PRIVATE_KEY //signer private key used to sign transaction
