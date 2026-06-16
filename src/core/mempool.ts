@@ -12,6 +12,8 @@ import { computeOptimalSandwich } from "./poolMath";
 import { evaluateProfit } from "./profit";
 import { checkTokenLists } from "./safety";
 import { BundleExecutor, SandwichPlan } from "./bundle";
+import { decodeV3Swap, V3RouterVersion } from "./v3/detect";
+import { v3PoolReader } from "./v3/pool";
 import { ethers as ethersLib } from "ethers";
 
 /** Reconnect backoff bounds for the websocket provider (ms). */
@@ -24,6 +26,7 @@ class mempool {
   private _wsprovider!: providers.WebSocketProvider;
   private _uniswap: ethers.utils.Interface;
   private _routers: Set<string>;
+  private _v3Routers: Map<string, V3RouterVersion>;
   private _seen: Set<string> = new Set();
   private _reconnectDelay = RECONNECT_MIN_DELAY;
   private _stopped = false;
@@ -34,6 +37,9 @@ class mempool {
     // Lower-case the router set once so per-tx comparisons are cheap.
     this._routers = new Set(
       config.SUPPORTED_ROUTERS.map((r) => r.toLowerCase())
+    );
+    this._v3Routers = new Map(
+      config.V3_ROUTERS.map((r) => [r.router.toLowerCase(), r.version])
     );
   }
 
@@ -109,9 +115,18 @@ class mempool {
     txReceipt: providers.TransactionResponse
   ) => {
     const router = txReceipt.to;
+    if (!router) return;
+    const to = router.toLowerCase();
 
-    // Only consider transactions going through a supported router.
-    if (!router || !this._routers.has(router.toLowerCase())) return;
+    // UniswapV3 routers take a separate detection path.
+    const v3Version = this._v3Routers.get(to);
+    if (v3Version) {
+      this.processV3Transaction(txReceipt, v3Version);
+      return;
+    }
+
+    // Only consider transactions going through a supported V2 router.
+    if (!this._routers.has(to)) return;
 
     let parsed: ethers.utils.TransactionDescription;
     try {
@@ -292,6 +307,63 @@ class mempool {
   private getExecutor = (): BundleExecutor => {
     if (!this._executor) this._executor = new BundleExecutor();
     return this._executor;
+  };
+
+  /**
+   * UniswapV3 detection path. Decodes the victim swap and reads the target
+   * pool's state. Sizing + firing for V3 require stateful simulation (tick math
+   * or eth_callBundle) and land in a follow-up — for now we surface the target
+   * and the pool state a sizer will consume.
+   */
+  private processV3Transaction = async (
+    txReceipt: providers.TransactionResponse,
+    version: V3RouterVersion
+  ) => {
+    const swap = decodeV3Swap(txReceipt.data, version);
+    if (!swap) return;
+
+    const weth = config.WETH.toLowerCase();
+    // First cut mirrors the V2 path: only WETH-funded buys.
+    if (swap.tokenIn !== weth) {
+      Logging.logTrace(`skip v3 ${txReceipt.hash}: input is not WETH`);
+      return;
+    }
+
+    const listCheck = checkTokenLists(swap.tokenOut);
+    if (!listCheck.ok) {
+      Logging.logTrace(`skip v3 ${txReceipt.hash}: ${listCheck.reason}`);
+      return;
+    }
+
+    const pool = await v3PoolReader.getState(
+      swap.tokenIn,
+      swap.tokenOut,
+      swap.fee
+    );
+    if (!pool) {
+      Logging.logTrace(
+        `skip v3 ${txReceipt.hash}: no pool ${swap.tokenOut}/${swap.fee}`
+      );
+      return;
+    }
+
+    Logging.logInfo("v3 target swap detected");
+    console.log({
+      hash: txReceipt.hash,
+      from: txReceipt.from,
+      method: swap.method,
+      multiHop: swap.multiHop,
+      tokenIn: swap.tokenIn,
+      tokenOut: swap.tokenOut,
+      fee: swap.fee,
+      amountIn: swap.amountIn.toString(),
+      amountOutMinimum: swap.amountOutMinimum.toString(),
+      pool: pool.pool,
+      sqrtPriceX96: pool.sqrtPriceX96.toString(),
+      liquidity: pool.liquidity.toString(),
+      tick: pool.tick,
+    });
+    // NOTE: optimal-input sizing + bundle firing for V3 are a follow-up.
   };
 }
 

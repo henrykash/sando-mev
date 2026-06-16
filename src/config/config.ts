@@ -28,6 +28,14 @@ export const config = {
   
   UNIV2_ROUTER: "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D", //uniswapV2 router contract
   UNIV2_FACTORY: "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f", //uniswapV2 factory contract
+
+  // UniswapV3: two router generations (different calldata shapes) + factory/quoter.
+  V3_ROUTERS: [
+    { router: "0xE592427A0AEce92De3Edee1F18E0157C05861564", version: "v1" as const }, // SwapRouter
+    { router: "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45", version: "v2" as const }, // SwapRouter02
+  ],
+  UNIV3_FACTORY: "0x1F98431c8aD98523631AE4a59f267346ea31F984",
+  UNIV3_QUOTER: "0x61fFE014bA17989E743c5F6cB21bF9697530B21e", // QuoterV2
   SANDWICH: process.env.SANDWICH_CONTRACT!, // sandwhicher contract
 
   // Capital cap for a single frontrun, in wei. The optimal-input search never
