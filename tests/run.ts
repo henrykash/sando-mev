@@ -4,6 +4,7 @@ import "./setup"; // must come before any module that imports `config`
 import "./poolMath.test";
 import "./profit.test";
 import "./safety.test";
+import "./backtest.test";
 import { summary } from "./harness";
 
 summary();
