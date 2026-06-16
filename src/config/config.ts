@@ -1,9 +1,15 @@
-import { utils } from "ethers";
+import { utils, BigNumber } from "ethers";
 import { Logging } from "../logging/logging";
 
 require("dotenv").config();
 
 const ethersParseEther = (v: string) => utils.parseEther(v);
+
+const parseAddressList = (v?: string): string[] =>
+  (v ?? "")
+    .split(",")
+    .map((a) => a.trim().toLowerCase())
+    .filter((a) => a.length > 0);
 
 // Accept either WSS_URL or the older RPC_URL_WSS name used in .env.example.
 const WSS_URL = process.env.WSS_URL ?? process.env.RPC_URL_WSS;
@@ -35,5 +41,28 @@ export const config = {
   WSS_URL: WSS_URL!, //websocket provider
 
   SEARCH_WALLET: "0x23055E68DAfC3670b20651BD0B2E0Bcd46977b22",// Used to send transactions, needs ether
-  PRIVATE_KEY: process.env.PRIVATE_KEY //signer private key used to sign transaction
+  PRIVATE_KEY: process.env.PRIVATE_KEY, //signer private key used to sign transaction
+
+  // --- Execution layer -------------------------------------------------------
+  CHAIN_ID: Number(process.env.CHAIN_ID ?? "1"),
+  FLASHBOTS_AUTH_KEY: process.env.FLASHBOTS_AUTH_KEY, // reputation key for the relay
+  FLASHBOTS_RELAY: process.env.FLASHBOTS_RELAY ?? "https://relay.flashbots.net",
+
+  // Safety: when true (default) we simulate and log but never submit a bundle.
+  DRY_RUN: (process.env.DRY_RUN ?? "true").toLowerCase() !== "false",
+
+  // Minimum net WETH we insist on keeping after gas + bribe.
+  MIN_MARGIN_WEI: ethersParseEther(process.env.MIN_MARGIN_ETH ?? "0.02"),
+
+  // Gas units per leg (executor swaps directly on the pair; tune from sims).
+  FRONTRUN_GAS: BigNumber.from(process.env.FRONTRUN_GAS ?? "120000"),
+  BACKRUN_GAS: BigNumber.from(process.env.BACKRUN_GAS ?? "120000"),
+
+  // If a simulated leg's output falls more than this many bps below the
+  // constant-product prediction, treat the token as fee-on-transfer/honeypot.
+  FEE_TOLERANCE_BPS: Number(process.env.FEE_TOLERANCE_BPS ?? "100"),
+
+  // Optional token allow/deny lists (comma-separated addresses).
+  TOKEN_ALLOWLIST: parseAddressList(process.env.TOKEN_ALLOWLIST),
+  TOKEN_DENYLIST: parseAddressList(process.env.TOKEN_DENYLIST),
 };

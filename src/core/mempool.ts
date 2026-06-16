@@ -9,6 +9,9 @@ import {
 } from "../utils";
 import { reserveManager } from "./reserves";
 import { computeOptimalSandwich } from "./poolMath";
+import { evaluateProfit } from "./profit";
+import { checkTokenLists } from "./safety";
+import { BundleExecutor, SandwichPlan } from "./bundle";
 import { ethers as ethersLib } from "ethers";
 
 /** Reconnect backoff bounds for the websocket provider (ms). */
@@ -24,6 +27,7 @@ class mempool {
   private _seen: Set<string> = new Set();
   private _reconnectDelay = RECONNECT_MIN_DELAY;
   private _stopped = false;
+  private _executor?: BundleExecutor;
 
   constructor() {
     this._uniswap = new ethers.utils.Interface(UniswapV2RouterABI);
@@ -159,22 +163,24 @@ class mempool {
       },
     });
 
-    await this.evaluateSandwich(swap, txReceipt.hash);
+    await this.evaluateSandwich(swap, txReceipt);
   };
 
   /**
-   * Feasibility gate + optimal-input calculation for a detected swap.
+   * Full decision pipeline for a detected swap: feasibility gate -> optimal
+   * input -> token safety -> net-profit/bribe accounting -> simulate (and, when
+   * DRY_RUN is off, fire) the bundle.
    *
-   * For this first cut we only sandwich the simple, common case: an exact-input
-   * buy of a token directly with WETH (2-hop path WETH -> TOKEN). Token sells,
-   * exact-output swaps, and multi-hop paths are recognised but skipped — they
-   * need their own models and are tracked for a later pass.
+   * For now we only sandwich the simple, common case: an exact-input buy of a
+   * token directly with WETH (2-hop path WETH -> TOKEN). Token sells,
+   * exact-output swaps, and multi-hop paths are recognised but skipped.
    */
   private evaluateSandwich = async (
     swap: ReturnType<typeof HelpersWrapper.extractSwapDetails>,
-    hash: string
+    txReceipt: providers.TransactionResponse
   ) => {
     if (!swap) return;
+    const hash = txReceipt.hash;
 
     const weth = config.WETH.toLowerCase();
     const isDirectWethBuy =
@@ -189,6 +195,15 @@ class mempool {
     }
 
     const tokenOut = swap.path[1];
+
+    // Token safety: deny/allow lists (dynamic fee-on-transfer detection happens
+    // against the bundle simulation downstream).
+    const listCheck = checkTokenLists(tokenOut);
+    if (!listCheck.ok) {
+      Logging.logTrace(`skip ${hash}: ${listCheck.reason}`);
+      return;
+    }
+
     const reserves = await reserveManager.getReserves(config.WETH, tokenOut);
     if (!reserves) {
       Logging.logTrace(`skip ${hash}: no WETH/${tokenOut} pool`);
@@ -208,9 +223,28 @@ class mempool {
       return;
     }
 
-    // Gross profit only — gas + bribe accounting and simulation come next (P1
-    // executor/bundle work). This is the input to that net-profit decision.
-    Logging.logSuccess(`candidate sandwich for ${hash}`);
+    // Net-profit + bribe: subtract both legs' gas at the projected base fee and
+    // bid the surplus above our margin to the validator.
+    const block = await this._wsprovider.getBlock("latest");
+    const nextBaseFee = HelpersWrapper.calculateNextBlockBaseFee(block);
+    const decision = evaluateProfit({
+      grossProfit: quote.grossProfit,
+      nextBaseFee,
+      frontrunGas: config.FRONTRUN_GAS,
+      backrunGas: config.BACKRUN_GAS,
+      minMargin: config.MIN_MARGIN_WEI,
+    });
+
+    if (!decision.viable) {
+      Logging.logTrace(
+        `skip ${hash}: net unprofitable (gross ${ethersLib.utils.formatEther(
+          quote.grossProfit
+        )} - gas ${ethersLib.utils.formatEther(decision.gasCost)} < margin)`
+      );
+      return;
+    }
+
+    Logging.logSuccess(`profitable sandwich for ${hash}`);
     console.log({
       pair: reserves.pair,
       token: tokenOut,
@@ -219,7 +253,45 @@ class mempool {
       victimOut: quote.victimOut.toString(),
       backrunOut: ethersLib.utils.formatEther(quote.backrunOut),
       grossProfitWeth: ethersLib.utils.formatEther(quote.grossProfit),
+      gasCostWeth: ethersLib.utils.formatEther(decision.gasCost),
+      bribeWeth: ethersLib.utils.formatEther(decision.bribe),
+      netProfitWeth: ethersLib.utils.formatEther(decision.netProfit),
     });
+
+    // Build, simulate, and (unless DRY_RUN) fire the bundle. Requires a funded
+    // signer and a deployed executor; without them we stay in monitor mode.
+    if (!config.PRIVATE_KEY || !config.SANDWICH) {
+      Logging.logTrace(
+        `not firing ${hash}: PRIVATE_KEY/SANDWICH not configured (monitor mode)`
+      );
+      return;
+    }
+
+    try {
+      const executor = this.getExecutor();
+      const tolBps = config.FEE_TOLERANCE_BPS;
+      const plan: SandwichPlan = {
+        quote,
+        pair: reserves.pair,
+        token: tokenOut,
+        wethIsToken0: reserves.token0 === weth,
+        frontMinOut: quote.tokensBought.mul(10_000 - tolBps).div(10_000),
+        backMinOut: quote.backrunOut.mul(10_000 - tolBps).div(10_000),
+        bribe: decision.bribe,
+        gasPerLeg: { frontrun: config.FRONTRUN_GAS, backrun: config.BACKRUN_GAS },
+        nextBaseFee,
+      };
+      const victimRaw = BundleExecutor.reconstructVictimRaw(txReceipt);
+      await executor.fire(plan, victimRaw);
+    } catch (error) {
+      Logging.logError(error);
+    }
+  };
+
+  /** Lazily construct the bundle executor (needs signer + deployed contract). */
+  private getExecutor = (): BundleExecutor => {
+    if (!this._executor) this._executor = new BundleExecutor();
+    return this._executor;
   };
 }
 
