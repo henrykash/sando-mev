@@ -1,4 +1,7 @@
 # sando-mev 🔍
+
+![CI](https://github.com/henrykash/sando-mev/actions/workflows/ci.yml/badge.svg)
+
 - This is the beginning of my journey experimenting with MEV sandwicher bots using  flashbot bundlers 🧱 
 ## Overview
 
