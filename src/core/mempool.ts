@@ -7,6 +7,9 @@ import {
   FEE_ON_TRANSFER_METHODS,
   SANDWICHABLE_METHODS,
 } from "../utils";
+import { reserveManager } from "./reserves";
+import { computeOptimalSandwich } from "./poolMath";
+import { ethers as ethersLib } from "ethers";
 
 /** Reconnect backoff bounds for the websocket provider (ms). */
 const RECONNECT_MIN_DELAY = 1_000;
@@ -47,7 +50,7 @@ class mempool {
 
       this._wsprovider
         .getTransaction(txHash)
-        .then((tx) => tx?.hash && this.processTransaction(tx))
+        .then((tx) => (tx?.hash ? this.processTransaction(tx) : undefined))
         .catch((error) => Logging.logError(error));
     });
 
@@ -98,7 +101,9 @@ class mempool {
     this._seen.add(txHash);
   };
 
-  private processTransaction = (txReceipt: providers.TransactionResponse) => {
+  private processTransaction = async (
+    txReceipt: providers.TransactionResponse
+  ) => {
     const router = txReceipt.to;
 
     // Only consider transactions going through a supported router.
@@ -152,6 +157,68 @@ class mempool {
         maxFeePerGas: gas.maxFeePerGas?.toString() ?? null,
         maxPriorityFeePerGas: gas.maxPriorityFeePerGas?.toString() ?? null,
       },
+    });
+
+    await this.evaluateSandwich(swap, txReceipt.hash);
+  };
+
+  /**
+   * Feasibility gate + optimal-input calculation for a detected swap.
+   *
+   * For this first cut we only sandwich the simple, common case: an exact-input
+   * buy of a token directly with WETH (2-hop path WETH -> TOKEN). Token sells,
+   * exact-output swaps, and multi-hop paths are recognised but skipped — they
+   * need their own models and are tracked for a later pass.
+   */
+  private evaluateSandwich = async (
+    swap: ReturnType<typeof HelpersWrapper.extractSwapDetails>,
+    hash: string
+  ) => {
+    if (!swap) return;
+
+    const weth = config.WETH.toLowerCase();
+    const isDirectWethBuy =
+      swap.kind === "exactIn" &&
+      swap.amountIn != null &&
+      swap.path.length === 2 &&
+      swap.path[0].toLowerCase() === weth;
+
+    if (!isDirectWethBuy) {
+      Logging.logTrace(`skip ${hash}: not a direct WETH->token exact-in buy`);
+      return;
+    }
+
+    const tokenOut = swap.path[1];
+    const reserves = await reserveManager.getReserves(config.WETH, tokenOut);
+    if (!reserves) {
+      Logging.logTrace(`skip ${hash}: no WETH/${tokenOut} pool`);
+      return;
+    }
+
+    const quote = computeOptimalSandwich({
+      victimIn: swap.amountIn!,
+      victimMinOut: swap.amountOutMin ?? ethersLib.BigNumber.from(0),
+      reserveIn: reserves.reserveIn, // WETH reserve
+      reserveOut: reserves.reserveOut, // token reserve
+      maxFrontrun: config.MAX_FRONTRUN_WEI,
+    });
+
+    if (!quote) {
+      Logging.logTrace(`skip ${hash}: no profitable frontrun`);
+      return;
+    }
+
+    // Gross profit only — gas + bribe accounting and simulation come next (P1
+    // executor/bundle work). This is the input to that net-profit decision.
+    Logging.logSuccess(`candidate sandwich for ${hash}`);
+    console.log({
+      pair: reserves.pair,
+      token: tokenOut,
+      frontrunIn: ethersLib.utils.formatEther(quote.frontrunIn),
+      tokensBought: quote.tokensBought.toString(),
+      victimOut: quote.victimOut.toString(),
+      backrunOut: ethersLib.utils.formatEther(quote.backrunOut),
+      grossProfitWeth: ethersLib.utils.formatEther(quote.grossProfit),
     });
   };
 }
