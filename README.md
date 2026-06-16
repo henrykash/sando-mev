@@ -19,6 +19,18 @@ The goal of this bot is to build an optimized searcher, brick 🧱 by 🧱 .
   - doing math in Typescript
   - calculating next base fee
 
+# backtesting 📊
+Estimate edge before risking capital by replaying historical victim swaps
+through the same optimal-input + net-profit logic the live bot uses:
+
+```
+npm run backtest -- path/to/dataset.json   # defaults to the bundled sample fixture
+```
+
+The dataset is JSON (wei-string fields); see `src/backtest/fixtures/sample.json`
+for the schema. `src/backtest/loader.ts` can build a dataset from real mainnet
+flow when pointed at an archive RPC.
+
 # tech-stack
 - `Typerscript`
 - `Ethersjs`

@@ -1,0 +1,42 @@
+{
+  "params": {
+    "maxFrontrun": "1000000000000000000",
+    "minMargin": "20000000000000000",
+    "frontrunGas": "120000",
+    "backrunGas": "120000"
+  },
+  "scenarios": [
+    {
+      "label": "demo:profitable-mid-pool",
+      "victimIn": "5000000000000000000",
+      "victimMinOut": "0",
+      "reserveWeth": "100000000000000000000",
+      "reserveToken": "200000000000000000000000",
+      "nextBaseFee": "20000000000"
+    },
+    {
+      "label": "demo:profitable-shallow-pool",
+      "victimIn": "10000000000000000000",
+      "victimMinOut": "0",
+      "reserveWeth": "50000000000000000000",
+      "reserveToken": "100000000000000000000000",
+      "nextBaseFee": "15000000000"
+    },
+    {
+      "label": "demo:tiny-victim-deep-pool",
+      "victimIn": "1000000000000000",
+      "victimMinOut": "0",
+      "reserveWeth": "1000000000000000000000000",
+      "reserveToken": "1000000000000000000000000",
+      "nextBaseFee": "30000000000"
+    },
+    {
+      "label": "demo:tight-slippage",
+      "victimIn": "2000000000000000000",
+      "victimMinOut": "3900000000000000000000",
+      "reserveWeth": "100000000000000000000",
+      "reserveToken": "200000000000000000000000",
+      "nextBaseFee": "25000000000"
+    }
+  ]
+}
