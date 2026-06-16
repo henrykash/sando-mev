@@ -7,22 +7,9 @@ import {
   evaluateSandwich,
   computeOptimalSandwich,
 } from "../src/core/poolMath";
+import { test } from "./harness";
 
 const bn = (n: string | number) => BigNumber.from(n);
-
-let passed = 0;
-let failed = 0;
-function test(name: string, fn: () => void) {
-  try {
-    fn();
-    passed++;
-    console.log(`  ok  ${name}`);
-  } catch (err) {
-    failed++;
-    console.error(`FAIL  ${name}`);
-    console.error(`      ${(err as Error).message}`);
-  }
-}
 
 // --- getAmountOut matches the on-chain UniswapV2Library formula ---------------
 test("getAmountOut matches reference value", () => {
@@ -148,6 +135,3 @@ test("optimal frontrun beats every other feasible frontrun", () => {
     );
   }
 });
-
-console.log(`\n${passed} passed, ${failed} failed`);
-if (failed > 0) process.exit(1);
