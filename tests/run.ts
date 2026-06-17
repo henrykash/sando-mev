@@ -6,6 +6,8 @@ import "./profit.test";
 import "./safety.test";
 import "./backtest.test";
 import "./v3detect.test";
+import "./arb.test";
+import "./hints.test";
 import { summary } from "./harness";
 
 summary();
