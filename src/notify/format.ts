@@ -68,3 +68,34 @@ export function formatBacktestSummary(r: BacktestReport): string {
     `best single: ${eth(r.bestNet)} WETH${r.bestLabel ? ` (${r.bestLabel})` : ""}`,
   ].join("\n");
 }
+
+/** Sent once when the mempool monitor starts. */
+export function formatStartup(dryRun: boolean): string {
+  return [
+    `🤖 *sando-mev started*${dryRun ? " _(DRY_RUN)_" : ""}`,
+    `monitoring the mempool — alerts will arrive when a profitable opportunity is found.`,
+  ].join("\n");
+}
+
+/** Sent on a websocket connect/disconnect transition. */
+export function formatConnection(connected: boolean): string {
+  return connected
+    ? `🟢 *websocket connected* — watching pending transactions.`
+    : `🔴 *websocket disconnected* — reconnecting…`;
+}
+
+/** Periodic "still alive" summary with running counters. */
+export function formatHeartbeat(p: {
+  uptimeMinutes: number;
+  v2Targets: number;
+  v3Targets: number;
+  profitable: number;
+  dryRun: boolean;
+}): string {
+  return [
+    `💓 *sando-mev heartbeat*${p.dryRun ? " _(DRY_RUN)_" : ""}`,
+    `uptime: ${p.uptimeMinutes}m`,
+    `v2 targets: ${p.v2Targets} | v3 targets: ${p.v3Targets}`,
+    `profitable found: ${p.profitable}`,
+  ].join("\n");
+}

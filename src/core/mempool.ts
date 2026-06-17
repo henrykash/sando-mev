@@ -15,7 +15,12 @@ import { BundleExecutor, SandwichPlan } from "./bundle";
 import { decodeV3Swap, V3RouterVersion } from "./v3/detect";
 import { v3PoolReader } from "./v3/pool";
 import { telegram } from "../notify/telegram";
-import { formatSandwichAlert } from "../notify/format";
+import {
+  formatSandwichAlert,
+  formatStartup,
+  formatConnection,
+  formatHeartbeat,
+} from "../notify/format";
 import { ethers as ethersLib } from "ethers";
 
 /** Reconnect backoff bounds for the websocket provider (ms). */
@@ -34,6 +39,14 @@ class mempool {
   private _stopped = false;
   private _executor?: BundleExecutor;
 
+  // Status/heartbeat tracking for Telegram visibility.
+  private _startedAt = 0;
+  private _wasConnected = false;
+  private _heartbeatTimer?: ReturnType<typeof setInterval>;
+  private _v2Targets = 0;
+  private _v3Targets = 0;
+  private _profitable = 0;
+
   constructor() {
     this._uniswap = new ethers.utils.Interface(UniswapV2RouterABI);
     // Lower-case the router set once so per-tx comparisons are cheap.
@@ -47,7 +60,27 @@ class mempool {
 
   public mempool = async () => {
     this._stopped = false;
+    this._startedAt = Date.now();
+    telegram.notify(formatStartup(config.DRY_RUN));
+    this.startHeartbeat();
     this.connect();
+  };
+
+  /** Periodic "still alive" Telegram summary so a quiet bot looks healthy. */
+  private startHeartbeat = () => {
+    const minutes = config.HEARTBEAT_MINUTES;
+    if (minutes <= 0 || this._heartbeatTimer) return;
+    this._heartbeatTimer = setInterval(() => {
+      telegram.notify(
+        formatHeartbeat({
+          uptimeMinutes: Math.round((Date.now() - this._startedAt) / 60_000),
+          v2Targets: this._v2Targets,
+          v3Targets: this._v3Targets,
+          profitable: this._profitable,
+          dryRun: config.DRY_RUN,
+        })
+      );
+    }, minutes * 60_000);
   };
 
   /** (Re)create the provider, wire up the pending feed, and handle drops. */
@@ -83,6 +116,11 @@ class mempool {
       Logging.logWarn(
         `websocket ${reason}; reconnecting in ${this._reconnectDelay}ms`
       );
+      // Notify once per "down" episode (guarded so a flapping socket doesn't spam).
+      if (this._wasConnected) {
+        this._wasConnected = false;
+        telegram.notify(formatConnection(false));
+      }
       // Tear down the old provider before scheduling a new one.
       this._wsprovider.removeAllListeners();
       this._wsprovider.destroy().catch(() => {});
@@ -100,6 +138,11 @@ class mempool {
       // Healthy connection: reset backoff.
       this._reconnectDelay = RECONNECT_MIN_DELAY;
       Logging.logSuccess("websocket connected");
+      // Notify once per "up" transition (not on every reconnect attempt).
+      if (!this._wasConnected) {
+        this._wasConnected = true;
+        telegram.notify(formatConnection(true));
+      }
     });
     // Surface the real reason so endpoint/auth/unsupported-subscription issues
     // are diagnosable (e.g. "closed (code 1006)", "errored: Unexpected server
@@ -162,6 +205,7 @@ class mempool {
 
     const swap = HelpersWrapper.extractSwapDetails(parsed, txReceipt.value);
     if (!swap) return;
+    this._v2Targets++;
 
     const gas = HelpersWrapper.parseGas(txReceipt);
 
@@ -295,6 +339,7 @@ class mempool {
       return;
     }
 
+    this._profitable++;
     Logging.logSuccess(`profitable sandwich for ${hash}`);
     console.log({
       pair: reserves.pair,
@@ -398,6 +443,7 @@ class mempool {
       return;
     }
 
+    this._v3Targets++;
     Logging.logInfo("v3 target swap detected");
     console.log({
       hash: txReceipt.hash,

@@ -91,4 +91,6 @@ export const config = {
   // Set both in .env. NEVER commit real values (the .env is gitignored).
   TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN,
   TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID,
+  // Minutes between "still alive" heartbeat messages (0 disables).
+  HEARTBEAT_MINUTES: Number(process.env.HEARTBEAT_MINUTES ?? "30"),
 };
