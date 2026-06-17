@@ -8,6 +8,7 @@
     "typecheck": "tsc --noEmit",
     "compile:contracts": "node scripts/compile.js",
     "backtest": "ts-node src/backtest/cli.ts",
+    "mevshare:validate": "ts-node src/mevshare/validate.ts",
     "start": "ts-node-dev  src/index.ts"
   },
   "keywords": [],

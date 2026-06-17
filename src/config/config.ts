@@ -73,4 +73,17 @@ export const config = {
   // Optional token allow/deny lists (comma-separated addresses).
   TOKEN_ALLOWLIST: parseAddressList(process.env.TOKEN_ALLOWLIST),
   TOKEN_DENYLIST: parseAddressList(process.env.TOKEN_DENYLIST),
+
+  // --- MEV-Share backrun edge validator (listen-only) ------------------------
+  MEVSHARE_STREAM_URL:
+    process.env.MEVSHARE_STREAM_URL ?? "https://mev-share.flashbots.net",
+  // Cap (wei) on the arb cycle size used by the optimal-input search.
+  ARB_MAX_IN_WEI: ethersParseEther(process.env.ARB_MAX_IN_ETH ?? "50"),
+  // Only log backrun candidates whose gross WETH profit clears this floor.
+  ARB_MIN_PROFIT_WEI: ethersParseEther(process.env.ARB_MIN_PROFIT_ETH ?? "0.005"),
+  // V2-compatible venues compared for cross-pool arbitrage (name -> factory).
+  V2_VENUES: [
+    { name: "uniswapv2", factory: "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f" },
+    { name: "sushiswap", factory: "0xC0AEe478e3658e2610c5F7A4A2E1777cE9e4f2Ac" },
+  ],
 };

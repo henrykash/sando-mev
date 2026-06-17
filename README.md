@@ -31,6 +31,17 @@ The dataset is JSON (wei-string fields); see `src/backtest/fixtures/sample.json`
 for the schema. `src/backtest/loader.ts` can build a dataset from real mainnet
 flow when pointed at an archive RPC.
 
+# mev-share backrun validator 🛰️
+A **listen-only** probe for the MEV-Share pivot (see `docs/MEV_SHARE_RESEARCH.md`).
+It subscribes to the MEV-Share hint stream and, for hinted swaps that leak pool
+reserves, estimates the cross-venue backrun arbitrage with the existing pool
+math — to measure whether real backrun edge exists before building the live
+path. **It never submits anything.**
+
+```
+npm run mevshare:validate
+```
+
 # tech-stack
 - `Typerscript`
 - `Ethersjs`
