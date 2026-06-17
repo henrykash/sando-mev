@@ -19,6 +19,32 @@ export interface Pool {
   reserveWeth: BigNumber;
   /** Token-side reserve. */
   reserveToken: BigNumber;
+  /** Swap fee in basis points (default 30 = 0.30%). V3 pools set their tier. */
+  feeBps?: number;
+}
+
+const Q96 = BigNumber.from(2).pow(96);
+
+/**
+ * Model a UniswapV3 pool as constant-product "virtual reserves" at its current
+ * price. With active liquidity L and price sqrtPriceX96, the virtual reserves
+ * are x = L·2^96 / sqrtP (token0) and y = L·sqrtP / 2^96 (token1); locally
+ * (within the current tick) the pool swaps exactly like a V2 pool with those
+ * reserves and the tier's fee. This lets V3 pools drop into the same arb math.
+ * (It under-models large, tick-crossing swaps — fine for a listen-only estimate.)
+ */
+export function v3VirtualPool(
+  sqrtPriceX96: BigNumber,
+  liquidity: BigNumber,
+  feeTier: number,
+  wethIsToken0: boolean
+): Pool {
+  const token0 = liquidity.mul(Q96).div(sqrtPriceX96); // virtual reserve token0
+  const token1 = liquidity.mul(sqrtPriceX96).div(Q96); // virtual reserve token1
+  const feeBps = Math.round(feeTier / 100); // 3000 -> 30bps
+  return wethIsToken0
+    ? { reserveWeth: token0, reserveToken: token1, feeBps }
+    : { reserveWeth: token1, reserveToken: token0, feeBps };
 }
 
 export interface ArbQuote {
@@ -52,10 +78,10 @@ export function applySwapToReserves(
 function cycleProfit(amountIn: BigNumber, buy: Pool, sell: Pool): BigNumber {
   if (amountIn.lte(0)) return ZERO;
   // WETH -> token on `buy`
-  const tokenOut = getAmountOut(amountIn, buy.reserveWeth, buy.reserveToken);
+  const tokenOut = getAmountOut(amountIn, buy.reserveWeth, buy.reserveToken, buy.feeBps);
   if (tokenOut.lte(0)) return ZERO;
   // token -> WETH on `sell`
-  const wethOut = getAmountOut(tokenOut, sell.reserveToken, sell.reserveWeth);
+  const wethOut = getAmountOut(tokenOut, sell.reserveToken, sell.reserveWeth, sell.feeBps);
   return wethOut.sub(amountIn);
 }
 

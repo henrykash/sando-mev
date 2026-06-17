@@ -5,6 +5,7 @@ import { MevShareStream } from "./client";
 import { parseHint, HintEvent, SyncHint } from "./hints";
 import { MultiVenueV2 } from "./venues";
 import { optimalCrossPoolArb, Pool } from "./arb";
+import { v3Venues } from "./v3venues";
 import { telegram } from "../notify/telegram";
 import { formatBackrunAlert } from "../notify/format";
 
@@ -79,6 +80,8 @@ export class BackrunValidator {
         : { reserveWeth: v.reserveWeth, reserveToken: v.reserveToken }
     );
     if (!venues.some((v) => v.pool === sync.pool)) pools.push(poolFromHint);
+    // Add UniswapV3 pools (virtual constant-product reserves) as arb venues.
+    for (const v of await v3Venues(this._weth, token)) pools.push(v.pool);
     if (pools.length < 2) return; // need two venues to arb
 
     // Evaluate every venue pairing; keep the best.

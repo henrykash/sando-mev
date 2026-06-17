@@ -5,6 +5,7 @@ import { UniswapV2RouterABI } from "../abi";
 import { HelpersWrapper, SANDWICHABLE_METHODS } from "../utils";
 import { MultiVenueV2 } from "../mevshare/venues";
 import { applySwapToReserves, optimalCrossPoolArb, Pool } from "../mevshare/arb";
+import { v3Venues } from "../mevshare/v3venues";
 import { MevBlockerStream, PartialPendingTx } from "./client";
 import { telegram } from "../notify/telegram";
 import { formatBackrunAlert } from "../notify/format";
@@ -115,18 +116,26 @@ export class MevBlockerBackrunValidator {
       reserveToken: post.reserveOut,
     };
 
+    // Counterparties: the other V2 venues plus any UniswapV3 pools (modelled as
+    // virtual constant-product reserves). The V3 pools are at live state — they
+    // aren't touched by the victim's V2 swap — so they're valid arb targets.
+    const counterparties: { venue: string; pool: Pool }[] = [
+      ...venues
+        .filter((v) => v.venue !== hitVenue)
+        .map((v) => ({
+          venue: v.venue,
+          pool: { reserveWeth: v.reserveWeth, reserveToken: v.reserveToken },
+        })),
+      ...(await v3Venues(this._weth, tokenOut)),
+    ];
+
     let best: ReturnType<typeof optimalCrossPoolArb> = null;
     let bestVenue = "";
-    for (const v of venues) {
-      if (v.venue === hitVenue) continue;
-      const other: Pool = {
-        reserveWeth: v.reserveWeth,
-        reserveToken: v.reserveToken,
-      };
-      const q = optimalCrossPoolArb(hitPool, other, config.ARB_MAX_IN_WEI);
+    for (const cp of counterparties) {
+      const q = optimalCrossPoolArb(hitPool, cp.pool, config.ARB_MAX_IN_WEI);
       if (q && (!best || q.profit.gt(best.profit))) {
         best = q;
-        bestVenue = v.venue;
+        bestVenue = cp.venue;
       }
     }
 
