@@ -41,9 +41,10 @@ test("TelegramNotifier: never throws if transport rejects", async () => {
   assert.strictEqual(await n.notify("x"), false);
 });
 
-test("formatSandwichAlert: includes net profit and tx hash", () => {
+test("formatSandwichAlert: includes net profit, tokenIn, and tx hash", () => {
   const msg = formatSandwichAlert({
     hash: "0xabc",
+    tokenIn: "0xwethish",
     token: "0xtoken",
     pair: "0xpair",
     quote: {
@@ -53,6 +54,7 @@ test("formatSandwichAlert: includes net profit and tx hash", () => {
       backrunOut: eth("1.1"),
       grossProfit: eth("0.1"),
     },
+    grossProfitWeth: eth("0.1"),
     decision: {
       viable: true,
       gasCost: eth("0.005"),
@@ -64,6 +66,7 @@ test("formatSandwichAlert: includes net profit and tx hash", () => {
   assert.ok(msg.includes("Sandwich opportunity"));
   assert.ok(msg.includes("DRY_RUN"));
   assert.ok(msg.includes("0xabc"));
+  assert.ok(msg.includes("0xwethish"));
   assert.ok(msg.includes("net: 0.02 WETH"));
 });
 

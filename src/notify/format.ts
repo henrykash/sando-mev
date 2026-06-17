@@ -13,19 +13,24 @@ const eth = (v: BigNumber) => utils.formatEther(v);
 /** Alert for a profitable sandwich candidate (sent before we execute). */
 export function formatSandwichAlert(params: {
   hash: string;
+  tokenIn: string;
   token: string;
   pair: string;
   quote: SandwichQuote;
+  /** Gross profit valued in WETH (profit is denominated in tokenIn). */
+  grossProfitWeth: BigNumber;
   decision: ProfitDecision;
   dryRun: boolean;
 }): string {
-  const { hash, token, pair, quote, decision, dryRun } = params;
+  const { hash, tokenIn, token, pair, quote, grossProfitWeth, decision, dryRun } =
+    params;
   return [
     `🥪 *Sandwich opportunity*${dryRun ? " _(DRY_RUN)_" : ""}`,
-    `token: \`${token}\``,
+    `tokenIn: \`${tokenIn}\``,
+    `tokenOut: \`${token}\``,
     `pair: \`${pair}\``,
-    `frontrun in: ${eth(quote.frontrunIn)} WETH`,
-    `gross: ${eth(quote.grossProfit)} WETH`,
+    `frontrun in: ${quote.frontrunIn.toString()} (tokenIn)`,
+    `gross: ${eth(grossProfitWeth)} WETH`,
     `gas: ${eth(decision.gasCost)} | bribe: ${eth(decision.bribe)} WETH`,
     `*net: ${eth(decision.netProfit)} WETH*`,
     `tx: \`${hash}\``,
