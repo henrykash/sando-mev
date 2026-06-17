@@ -1,10 +1,38 @@
 import assert from "assert";
 import { BigNumber, utils } from "ethers";
-import { optimalCrossPoolArb, Pool } from "../src/mevshare/arb";
+import {
+  optimalCrossPoolArb,
+  applySwapToReserves,
+  Pool,
+} from "../src/mevshare/arb";
 import { getAmountOut } from "../src/core/poolMath";
 import { test } from "./harness";
 
 const eth = (v: string) => utils.parseEther(v);
+
+test("applySwapToReserves: moves reserves consistently with getAmountOut", () => {
+  const rIn = eth("100");
+  const rOut = eth("200000");
+  const amountIn = eth("5");
+  const out = getAmountOut(amountIn, rIn, rOut);
+  const post = applySwapToReserves(amountIn, rIn, rOut);
+  assert.strictEqual(post.reserveIn.toString(), rIn.add(amountIn).toString());
+  assert.strictEqual(post.reserveOut.toString(), rOut.sub(out).toString());
+  // Constant-product invariant grows (fee accrues): k_after >= k_before.
+  assert.ok(post.reserveIn.mul(post.reserveOut).gte(rIn.mul(rOut)));
+});
+
+test("applySwapToReserves then arb: a big swap opens a cross-venue gap", () => {
+  // Two equal pools; a large WETH buy on pool A should make A's token dearer,
+  // creating a profitable buy-on-B / sell-on-A backrun.
+  const a: Pool = { reserveWeth: eth("100"), reserveToken: eth("200000") };
+  const b: Pool = { reserveWeth: eth("100"), reserveToken: eth("200000") };
+  const post = applySwapToReserves(eth("20"), a.reserveWeth, a.reserveToken);
+  const hit: Pool = { reserveWeth: post.reserveIn, reserveToken: post.reserveOut };
+  const q = optimalCrossPoolArb(hit, b, eth("50"));
+  assert.ok(q, "expected a backrun arb after the swap");
+  assert.ok(q!.profit.gt(0), `expected positive profit, got ${q!.profit}`);
+});
 
 test("optimalCrossPoolArb: no profit when pools are identical", () => {
   const p: Pool = { reserveWeth: eth("100"), reserveToken: eth("200000") };

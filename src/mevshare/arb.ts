@@ -32,6 +32,22 @@ export interface ArbQuote {
 
 const ZERO = BigNumber.from(0);
 
+/**
+ * Apply an exact-input swap of `amountIn` (the "in" token) to a pool and return
+ * its post-swap reserves. Used by orderflow sources that deliver the pending tx
+ * *before* execution (mempool / MEV Blocker), where we must simulate the swap's
+ * effect on the pool to know the reserves a backrun would act on. (MEV-Share, by
+ * contrast, leaks the post-swap Sync reserves directly.)
+ */
+export function applySwapToReserves(
+  amountIn: BigNumber,
+  reserveIn: BigNumber,
+  reserveOut: BigNumber
+): { reserveIn: BigNumber; reserveOut: BigNumber } {
+  const out = getAmountOut(amountIn, reserveIn, reserveOut);
+  return { reserveIn: reserveIn.add(amountIn), reserveOut: reserveOut.sub(out) };
+}
+
 /** WETH out from cycling `amountIn` WETH: buy token on `buy`, sell it on `sell`. */
 function cycleProfit(amountIn: BigNumber, buy: Pool, sell: Pool): BigNumber {
   if (amountIn.lte(0)) return ZERO;
