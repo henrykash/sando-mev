@@ -5,6 +5,9 @@ import {
   formatSandwichAlert,
   formatBackrunAlert,
   formatBacktestSummary,
+  formatStartup,
+  formatConnection,
+  formatHeartbeat,
 } from "../src/notify/format";
 import { test } from "./harness";
 
@@ -80,6 +83,29 @@ test("formatBackrunAlert: includes venues and gross profit", () => {
   assert.ok(msg.includes("Backrun arb"));
   assert.ok(msg.includes("uniswapv2 ↔ sushiswap"));
   assert.ok(msg.includes("0.03 WETH"));
+});
+
+test("formatStartup: notes DRY_RUN", () => {
+  assert.ok(formatStartup(true).includes("DRY_RUN"));
+  assert.ok(formatStartup(false).includes("started"));
+});
+
+test("formatConnection: distinguishes up vs down", () => {
+  assert.ok(formatConnection(true).includes("connected"));
+  assert.ok(formatConnection(false).includes("disconnected"));
+});
+
+test("formatHeartbeat: includes uptime and counters", () => {
+  const msg = formatHeartbeat({
+    uptimeMinutes: 42,
+    v2Targets: 7,
+    v3Targets: 99,
+    profitable: 1,
+    dryRun: true,
+  });
+  assert.ok(msg.includes("42m"));
+  assert.ok(msg.includes("v2 targets: 7"));
+  assert.ok(msg.includes("profitable found: 1"));
 });
 
 test("formatBacktestSummary: includes hit rate and net total", () => {
