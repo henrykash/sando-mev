@@ -11,6 +11,17 @@ const parseAddressList = (v?: string): string[] =>
     .map((a) => a.trim().toLowerCase())
     .filter((a) => a.length > 0);
 
+// Parse "name:factory,name:factory" into venue entries.
+const parseVenues = (v?: string): { name: string; factory: string }[] =>
+  (v ?? "")
+    .split(",")
+    .map((pair) => pair.trim())
+    .filter((pair) => pair.includes(":"))
+    .map((pair) => {
+      const [name, factory] = pair.split(":");
+      return { name: name.trim(), factory: factory.trim() };
+    });
+
 // Accept either WSS_URL or the older RPC_URL_WSS name used in .env.example.
 const WSS_URL = process.env.WSS_URL ?? process.env.RPC_URL_WSS;
 
@@ -82,10 +93,31 @@ export const config = {
   // Only log backrun candidates whose gross WETH profit clears this floor.
   ARB_MIN_PROFIT_WEI: ethersParseEther(process.env.ARB_MIN_PROFIT_ETH ?? "0.005"),
   // V2-compatible venues compared for cross-pool arbitrage (name -> factory).
+  // Extend with V2_VENUES_EXTRA="name:factory,name:factory" in .env.
   V2_VENUES: [
     { name: "uniswapv2", factory: "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f" },
     { name: "sushiswap", factory: "0xC0AEe478e3658e2610c5F7A4A2E1777cE9e4f2Ac" },
+    ...parseVenues(process.env.V2_VENUES_EXTRA),
   ],
+
+  // Router -> factory, so we can resolve which pool a pending swap will hit
+  // (used by the MEV Blocker source, which delivers the pending tx pre-exec).
+  V2_ROUTER_FACTORIES: [
+    {
+      router: "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
+      factory: "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f",
+    }, // uniswap v2
+    {
+      router: "0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F",
+      factory: "0xC0AEe478e3658e2610c5F7A4A2E1777cE9e4f2Ac",
+    }, // sushiswap
+  ],
+
+  // --- MEV Blocker orderflow source (listen-only) ----------------------------
+  MEVBLOCKER_WS_URL:
+    process.env.MEVBLOCKER_WS_URL ?? "wss://searchers.mevblocker.io",
+  MEVBLOCKER_ENABLED:
+    (process.env.MEVBLOCKER_ENABLED ?? "false").toLowerCase() === "true",
 
   // --- Telegram notifications ------------------------------------------------
   // Set both in .env. NEVER commit real values (the .env is gitignored).

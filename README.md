@@ -93,8 +93,14 @@ math — to measure whether real backrun edge exists before building the live
 path. **It never submits anything.**
 
 ```
-npm run mevshare:validate
+npm run mevshare:validate     # source: Flashbots MEV-Share hint stream
+npm run mevblocker:validate    # source: MEV Blocker searcher stream (private orderflow)
 ```
+
+`mevblocker:validate` taps the swaps that have left the public mempool, simulates
+each one's pool impact, and estimates a cross-venue backrun across the configured
+V2 venues. Add more venues with `V2_VENUES_EXTRA="name:factory,…"` in `.env`. Both
+are listen-only and never submit.
 
 # tech-stack
 - `Typerscript`
