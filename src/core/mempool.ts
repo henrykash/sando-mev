@@ -1,4 +1,4 @@
-import { ethers, providers } from "ethers";
+import { ethers, providers, BigNumber } from "ethers";
 import { config } from "../config/config";
 import { Logging } from "../logging/logging";
 import { UniswapV2RouterABI } from "../abi";
@@ -8,7 +8,7 @@ import {
   SANDWICHABLE_METHODS,
 } from "../utils";
 import { reserveManager } from "./reserves";
-import { computeOptimalSandwich } from "./poolMath";
+import { computeOptimalSandwich, getAmountOut } from "./poolMath";
 import { evaluateProfit } from "./profit";
 import { checkTokenLists } from "./safety";
 import { BundleExecutor, SandwichPlan } from "./bundle";
@@ -101,8 +101,17 @@ class mempool {
       this._reconnectDelay = RECONNECT_MIN_DELAY;
       Logging.logSuccess("websocket connected");
     });
-    ws.on("close", () => reconnect("closed"));
-    ws.on("error", () => reconnect("errored"));
+    // Surface the real reason so endpoint/auth/unsupported-subscription issues
+    // are diagnosable (e.g. "closed (code 1006)", "errored: Unexpected server
+    // response: 401"). A 4xx/426/1006 right after connect usually means the
+    // WSS url/key is wrong or the provider doesn't support pending-tx streaming.
+    ws.on("close", (code: number, reason: Buffer | string) => {
+      const why = reason?.toString().trim();
+      reconnect(`closed (code ${code}${why ? `: ${why}` : ""})`);
+    });
+    ws.on("error", (err: Error) =>
+      reconnect(`errored: ${err?.message ?? err}`)
+    );
   };
 
   /** Track seen hashes with a simple bound to cap memory. */
@@ -184,13 +193,17 @@ class mempool {
   };
 
   /**
-   * Full decision pipeline for a detected swap: feasibility gate -> optimal
-   * input -> token safety -> net-profit/bribe accounting -> simulate (and, when
-   * DRY_RUN is off, fire) the bundle.
+   * Full decision pipeline for a detected swap: token safety -> optimal input
+   * -> net-profit/bribe accounting -> simulate (and, when DRY_RUN is off, fire).
    *
-   * For now we only sandwich the simple, common case: an exact-input buy of a
-   * token directly with WETH (2-hop path WETH -> TOKEN). Token sells,
-   * exact-output swaps, and multi-hop paths are recognised but skipped.
+   * Generalised to ANY direct 2-hop exact-input swap (any tokenIn -> tokenOut):
+   * WETH->token buys, token->WETH sells, and token->token. The optimal-input math
+   * is token-agnostic, so gross profit is computed in tokenIn units and then
+   * valued in WETH (via the tokenIn/WETH pool) so it can be netted against gas.
+   *
+   * Firing is limited to WETH-funded frontruns (the on-chain executor holds
+   * WETH); profitable non-WETH-input opportunities are surfaced + alerted but not
+   * fired, since the frontrun would need tokenIn inventory.
    */
   private evaluateSandwich = async (
     swap: ReturnType<typeof HelpersWrapper.extractSwapDetails>,
@@ -198,41 +211,62 @@ class mempool {
   ) => {
     if (!swap) return;
     const hash = txReceipt.hash;
-
     const weth = config.WETH.toLowerCase();
-    const isDirectWethBuy =
-      swap.kind === "exactIn" &&
-      swap.amountIn != null &&
-      swap.path.length === 2 &&
-      swap.path[0].toLowerCase() === weth;
 
-    if (!isDirectWethBuy) {
-      Logging.logTrace(`skip ${hash}: not a direct WETH->token exact-in buy`);
+    if (swap.kind !== "exactIn" || swap.amountIn == null || swap.path.length !== 2) {
+      Logging.logTrace(`skip ${hash}: not a direct exact-in 2-hop swap`);
       return;
     }
+    const tokenIn = swap.path[0].toLowerCase();
+    const tokenOut = swap.path[1].toLowerCase();
 
-    const tokenOut = swap.path[1];
-
-    // Token safety: deny/allow lists (dynamic fee-on-transfer detection happens
-    // against the bundle simulation downstream).
+    // Token safety on the token we'd acquire and resell.
     const listCheck = checkTokenLists(tokenOut);
     if (!listCheck.ok) {
       Logging.logTrace(`skip ${hash}: ${listCheck.reason}`);
       return;
     }
 
-    const reserves = await reserveManager.getReserves(config.WETH, tokenOut);
+    const reserves = await reserveManager.getReserves(tokenIn, tokenOut);
     if (!reserves) {
-      Logging.logTrace(`skip ${hash}: no WETH/${tokenOut} pool`);
+      Logging.logTrace(`skip ${hash}: no ${tokenIn}/${tokenOut} pool`);
+      return;
+    }
+
+    // Capital cap and the gas-netting valuation both need a WETH reference.
+    // For WETH input it's the identity; otherwise we go through the tokenIn/WETH
+    // pool to (a) size the cap in tokenIn units and (b) value profit in WETH.
+    let maxFrontrun: BigNumber;
+    let valueInWeth: (amt: BigNumber) => BigNumber;
+    if (tokenIn === weth) {
+      maxFrontrun = config.MAX_FRONTRUN_WEI;
+      valueInWeth = (amt) => amt;
+    } else {
+      const wethPool = await reserveManager.getReserves(weth, tokenIn);
+      if (!wethPool) {
+        Logging.logTrace(`skip ${hash}: no WETH route to value ${tokenIn}`);
+        return;
+      }
+      // wethPool.reserveIn = WETH reserve, reserveOut = tokenIn reserve.
+      maxFrontrun = getAmountOut(
+        config.MAX_FRONTRUN_WEI,
+        wethPool.reserveIn,
+        wethPool.reserveOut
+      );
+      valueInWeth = (amt) =>
+        getAmountOut(amt, wethPool.reserveOut, wethPool.reserveIn);
+    }
+    if (maxFrontrun.lte(0)) {
+      Logging.logTrace(`skip ${hash}: zero frontrun cap`);
       return;
     }
 
     const quote = computeOptimalSandwich({
       victimIn: swap.amountIn!,
       victimMinOut: swap.amountOutMin ?? ethersLib.BigNumber.from(0),
-      reserveIn: reserves.reserveIn, // WETH reserve
-      reserveOut: reserves.reserveOut, // token reserve
-      maxFrontrun: config.MAX_FRONTRUN_WEI,
+      reserveIn: reserves.reserveIn, // tokenIn reserve
+      reserveOut: reserves.reserveOut, // tokenOut reserve
+      maxFrontrun,
     });
 
     if (!quote) {
@@ -240,12 +274,12 @@ class mempool {
       return;
     }
 
-    // Net-profit + bribe: subtract both legs' gas at the projected base fee and
-    // bid the surplus above our margin to the validator.
+    // Value the (tokenIn-denominated) gross profit in WETH, then net out gas.
+    const grossWeth = valueInWeth(quote.grossProfit);
     const block = await this._wsprovider.getBlock("latest");
     const nextBaseFee = HelpersWrapper.calculateNextBlockBaseFee(block);
     const decision = evaluateProfit({
-      grossProfit: quote.grossProfit,
+      grossProfit: grossWeth,
       nextBaseFee,
       frontrunGas: config.FRONTRUN_GAS,
       backrunGas: config.BACKRUN_GAS,
@@ -255,8 +289,8 @@ class mempool {
     if (!decision.viable) {
       Logging.logTrace(
         `skip ${hash}: net unprofitable (gross ${ethersLib.utils.formatEther(
-          quote.grossProfit
-        )} - gas ${ethersLib.utils.formatEther(decision.gasCost)} < margin)`
+          grossWeth
+        )} WETH - gas ${ethersLib.utils.formatEther(decision.gasCost)} < margin)`
       );
       return;
     }
@@ -264,12 +298,11 @@ class mempool {
     Logging.logSuccess(`profitable sandwich for ${hash}`);
     console.log({
       pair: reserves.pair,
+      tokenIn,
       token: tokenOut,
-      frontrunIn: ethersLib.utils.formatEther(quote.frontrunIn),
-      tokensBought: quote.tokensBought.toString(),
-      victimOut: quote.victimOut.toString(),
-      backrunOut: ethersLib.utils.formatEther(quote.backrunOut),
-      grossProfitWeth: ethersLib.utils.formatEther(quote.grossProfit),
+      frontrunIn: quote.frontrunIn.toString(), // tokenIn base units
+      grossProfitTokenIn: quote.grossProfit.toString(),
+      grossProfitWeth: ethersLib.utils.formatEther(grossWeth),
       gasCostWeth: ethersLib.utils.formatEther(decision.gasCost),
       bribeWeth: ethersLib.utils.formatEther(decision.bribe),
       netProfitWeth: ethersLib.utils.formatEther(decision.netProfit),
@@ -279,14 +312,23 @@ class mempool {
     await telegram.notify(
       formatSandwichAlert({
         hash,
+        tokenIn,
         token: tokenOut,
         pair: reserves.pair,
         quote,
+        grossProfitWeth: grossWeth,
         decision,
         dryRun: config.DRY_RUN,
       })
     );
 
+    // Firing is limited to WETH-funded frontruns (the executor holds WETH).
+    if (tokenIn !== weth) {
+      Logging.logTrace(
+        `alert-only ${hash}: non-WETH input ${tokenIn} (firing needs inventory)`
+      );
+      return;
+    }
     // Build, simulate, and (unless DRY_RUN) fire the bundle. Requires a funded
     // signer and a deployed executor; without them we stay in monitor mode.
     if (!config.PRIVATE_KEY || !config.SANDWICH) {
@@ -336,13 +378,8 @@ class mempool {
     const swap = decodeV3Swap(txReceipt.data, version);
     if (!swap) return;
 
-    const weth = config.WETH.toLowerCase();
-    // First cut mirrors the V2 path: only WETH-funded buys.
-    if (swap.tokenIn !== weth) {
-      Logging.logTrace(`skip v3 ${txReceipt.hash}: input is not WETH`);
-      return;
-    }
-
+    // Detection covers all pairs (no WETH filter). Sizing/firing for V3 still
+    // need stateful simulation, so this path only surfaces the target + pool.
     const listCheck = checkTokenLists(swap.tokenOut);
     if (!listCheck.ok) {
       Logging.logTrace(`skip v3 ${txReceipt.hash}: ${listCheck.reason}`);
