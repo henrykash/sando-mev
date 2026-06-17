@@ -34,7 +34,23 @@ test("TelegramNotifier: sends correct payload when configured", async () => {
   assert.strictEqual(sent[0].token, "TOK");
   assert.strictEqual(sent[0].payload.chat_id, "123");
   assert.strictEqual(sent[0].payload.text, "hello");
-  assert.strictEqual(sent[0].payload.parse_mode, "Markdown");
+  // Plain text — no parse_mode (avoids Telegram entity-parse errors).
+  assert.strictEqual(sent[0].payload.parse_mode, undefined);
+});
+
+test("formatters emit no Markdown entity characters", () => {
+  // Guard against the "can't parse entities" 400: messages must be plain text.
+  const samples = [
+    formatStartup(true),
+    formatConnection(true),
+    formatConnection(false),
+    formatHeartbeat({ uptimeMinutes: 1, v2Targets: 0, v3Targets: 0, profitable: 0, dryRun: true }),
+  ];
+  // Underscores (e.g. DRY_RUN) are fine in plain text; only the bold/code
+  // markers we removed would render as literal noise.
+  for (const s of samples) {
+    assert.ok(!/[*`]/.test(s), `unexpected markdown char in: ${s}`);
+  }
 });
 
 test("TelegramNotifier: never throws if transport rejects", async () => {

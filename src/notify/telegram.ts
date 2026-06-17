@@ -72,10 +72,12 @@ export class TelegramNotifier {
   async notify(text: string): Promise<boolean> {
     if (!this.token || !this.chatId) return false;
     try {
+      // Plain text on purpose — no parse_mode. Our messages contain underscores
+      // (DRY_RUN), em dashes and parentheses that break Telegram's Markdown
+      // entity parser ("Bad Request: can't parse entities").
       await this.send(this.token, {
         chat_id: this.chatId,
         text,
-        parse_mode: "Markdown",
         disable_web_page_preview: true,
       });
       return true;
