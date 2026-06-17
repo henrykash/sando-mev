@@ -12,16 +12,22 @@ const FEE_NUMERATOR = BigNumber.from(997);
 const FEE_DENOMINATOR = BigNumber.from(1000);
 const ZERO = BigNumber.from(0);
 
-/** Exact analogue of UniswapV2Library.getAmountOut. */
+/**
+ * Constant-product getAmountOut. `feeBps` defaults to 30 (the UniswapV2 0.30%
+ * fee, identical to the classic 997/1000), and is parameterised so other fee
+ * tiers — e.g. UniswapV3 pools modelled as virtual constant-product reserves —
+ * can reuse the same math (500 => 5bps, 3000 => 30bps, 10000 => 100bps).
+ */
 export function getAmountOut(
   amountIn: BigNumber,
   reserveIn: BigNumber,
-  reserveOut: BigNumber
+  reserveOut: BigNumber,
+  feeBps = 30
 ): BigNumber {
   if (amountIn.lte(0) || reserveIn.lte(0) || reserveOut.lte(0)) return ZERO;
-  const amountInWithFee = amountIn.mul(FEE_NUMERATOR);
+  const amountInWithFee = amountIn.mul(10_000 - feeBps);
   const numerator = amountInWithFee.mul(reserveOut);
-  const denominator = reserveIn.mul(FEE_DENOMINATOR).add(amountInWithFee);
+  const denominator = reserveIn.mul(10_000).add(amountInWithFee);
   return numerator.div(denominator);
 }
 

@@ -3,12 +3,59 @@ import { BigNumber, utils } from "ethers";
 import {
   optimalCrossPoolArb,
   applySwapToReserves,
+  v3VirtualPool,
   Pool,
 } from "../src/mevshare/arb";
 import { getAmountOut } from "../src/core/poolMath";
 import { test } from "./harness";
 
 const eth = (v: string) => utils.parseEther(v);
+const Q96 = BigNumber.from(2).pow(96);
+
+test("getAmountOut: feeBps default matches V2 0.30% and lower fee yields more", () => {
+  const rIn = BigNumber.from(1_000_000);
+  const rOut = BigNumber.from(1_000_000);
+  assert.strictEqual(getAmountOut(BigNumber.from(1000), rIn, rOut).toString(), "996");
+  assert.strictEqual(
+    getAmountOut(BigNumber.from(1000), rIn, rOut, 30).toString(),
+    "996"
+  );
+  // 5bps (V3 0.05% tier) returns strictly more than 30bps.
+  assert.ok(
+    getAmountOut(BigNumber.from(1000), rIn, rOut, 5).gt(
+      getAmountOut(BigNumber.from(1000), rIn, rOut, 30)
+    )
+  );
+});
+
+test("v3VirtualPool: price-1 pool gives equal reserves and maps fee tier", () => {
+  const L = eth("1000");
+  // sqrtPriceX96 = Q96 => price 1 => virtual reserves equal.
+  const pool = v3VirtualPool(Q96, L, 3000, true);
+  assert.strictEqual(pool.reserveWeth.toString(), L.toString());
+  assert.strictEqual(pool.reserveToken.toString(), L.toString());
+  assert.strictEqual(pool.feeBps, 30); // 3000 -> 30bps
+});
+
+test("v3VirtualPool: orientation flips with wethIsToken0", () => {
+  const L = eth("1000");
+  const sqrtP = Q96.mul(2); // price 4 (token1/token0)
+  const asToken0 = v3VirtualPool(sqrtP, L, 500, true);
+  const asToken1 = v3VirtualPool(sqrtP, L, 500, false);
+  // Swapping which side is WETH swaps the two reserves.
+  assert.strictEqual(asToken0.reserveWeth.toString(), asToken1.reserveToken.toString());
+  assert.strictEqual(asToken0.reserveToken.toString(), asToken1.reserveWeth.toString());
+  assert.strictEqual(asToken0.feeBps, 5); // 500 -> 5bps
+});
+
+test("arb works across a V2 pool and a V3 virtual pool", () => {
+  // V2 pool priced differently from a V3 pool of the same pair => arb exists.
+  const v2: Pool = { reserveWeth: eth("100"), reserveToken: eth("220000") };
+  const v3 = v3VirtualPool(Q96, eth("150000"), 3000, true); // ~price 1 region
+  const q = optimalCrossPoolArb(v2, v3, eth("50"));
+  assert.ok(q, "expected an arb across V2 and V3");
+  assert.ok(q!.profit.gt(0), `expected positive profit, got ${q!.profit}`);
+});
 
 test("applySwapToReserves: moves reserves consistently with getAmountOut", () => {
   const rIn = eth("100");
