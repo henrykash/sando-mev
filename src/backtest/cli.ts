@@ -3,6 +3,8 @@ import * as path from "path";
 import { BigNumber } from "ethers";
 import { runBacktest, BacktestScenario, BacktestParams } from "./engine";
 import { formatReport } from "./report";
+import { telegram } from "../notify/telegram";
+import { formatBacktestSummary } from "../notify/format";
 
 /**
  * Run a backtest from a JSON fixture of historical scenarios.
@@ -49,7 +51,7 @@ function load(file: string): { scenarios: BacktestScenario[]; params: BacktestPa
   return { scenarios, params };
 }
 
-function main() {
+async function main() {
   const file =
     process.argv[2] ||
     path.join(__dirname, "fixtures", "sample.json");
@@ -60,6 +62,8 @@ function main() {
   const { scenarios, params } = load(file);
   const report = runBacktest(scenarios, params);
   console.log(formatReport(report));
+  // Push the summary to Telegram if configured (no-op otherwise).
+  await telegram.notify(formatBacktestSummary(report));
 }
 
 main();

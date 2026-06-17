@@ -14,6 +14,8 @@ import { checkTokenLists } from "./safety";
 import { BundleExecutor, SandwichPlan } from "./bundle";
 import { decodeV3Swap, V3RouterVersion } from "./v3/detect";
 import { v3PoolReader } from "./v3/pool";
+import { telegram } from "../notify/telegram";
+import { formatSandwichAlert } from "../notify/format";
 import { ethers as ethersLib } from "ethers";
 
 /** Reconnect backoff bounds for the websocket provider (ms). */
@@ -272,6 +274,18 @@ class mempool {
       bribeWeth: ethersLib.utils.formatEther(decision.bribe),
       netProfitWeth: ethersLib.utils.formatEther(decision.netProfit),
     });
+
+    // Notify before we execute, so opportunities are visible even in DRY_RUN.
+    await telegram.notify(
+      formatSandwichAlert({
+        hash,
+        token: tokenOut,
+        pair: reserves.pair,
+        quote,
+        decision,
+        dryRun: config.DRY_RUN,
+      })
+    );
 
     // Build, simulate, and (unless DRY_RUN) fire the bundle. Requires a funded
     // signer and a deployed executor; without them we stay in monitor mode.

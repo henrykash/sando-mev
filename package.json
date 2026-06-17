@@ -9,6 +9,8 @@
     "compile:contracts": "node scripts/compile.js",
     "backtest": "ts-node src/backtest/cli.ts",
     "mevshare:validate": "ts-node src/mevshare/validate.ts",
+    "telegram:chatid": "ts-node src/notify/chatid.ts",
+    "telegram:test": "ts-node src/notify/test.ts",
     "start": "ts-node-dev  src/index.ts"
   },
   "keywords": [],

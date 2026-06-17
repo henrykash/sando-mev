@@ -5,6 +5,8 @@ import { MevShareStream } from "./client";
 import { parseHint, HintEvent, SyncHint } from "./hints";
 import { MultiVenueV2 } from "./venues";
 import { optimalCrossPoolArb, Pool } from "./arb";
+import { telegram } from "../notify/telegram";
+import { formatBackrunAlert } from "../notify/format";
 
 /**
  * Listen-only MEV-Share backrun edge validator (Phase A of the pivot — see
@@ -106,5 +108,14 @@ export class BackrunValidator {
         bestProfitWeth: ethers.utils.formatEther(this._bestProfit),
       },
     });
+
+    await telegram.notify(
+      formatBackrunAlert({
+        hash,
+        token,
+        venues: venues.map((v) => v.venue),
+        quote: best,
+      })
+    );
   }
 }

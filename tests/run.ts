@@ -8,6 +8,7 @@ import "./backtest.test";
 import "./v3detect.test";
 import "./arb.test";
 import "./hints.test";
-import { summary } from "./harness";
+import "./notify.test";
+import { runAll, summary } from "./harness";
 
-summary();
+runAll().then(summary);
