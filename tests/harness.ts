@@ -1,17 +1,27 @@
-// Tiny shared test harness so each test file can register cases and a single
-// runner can aggregate pass/fail across them.
+// Tiny shared test harness. Tests register via `test()` and are executed by
+// `runAll()` so async cases are awaited (a synchronous try/catch would miss
+// rejected promises and silently "pass").
+type TestFn = () => void | Promise<void>;
+
+const cases: { name: string; fn: TestFn }[] = [];
 let passed = 0;
 let failed = 0;
 
-export function test(name: string, fn: () => void) {
-  try {
-    fn();
-    passed++;
-    console.log(`  ok  ${name}`);
-  } catch (err) {
-    failed++;
-    console.error(`FAIL  ${name}`);
-    console.error(`      ${(err as Error).message}`);
+export function test(name: string, fn: TestFn) {
+  cases.push({ name, fn });
+}
+
+export async function runAll(): Promise<void> {
+  for (const { name, fn } of cases) {
+    try {
+      await fn();
+      passed++;
+      console.log(`  ok  ${name}`);
+    } catch (err) {
+      failed++;
+      console.error(`FAIL  ${name}`);
+      console.error(`      ${(err as Error).message}`);
+    }
   }
 }
 

@@ -86,4 +86,9 @@ export const config = {
     { name: "uniswapv2", factory: "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f" },
     { name: "sushiswap", factory: "0xC0AEe478e3658e2610c5F7A4A2E1777cE9e4f2Ac" },
   ],
+
+  // --- Telegram notifications ------------------------------------------------
+  // Set both in .env. NEVER commit real values (the .env is gitignored).
+  TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN,
+  TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID,
 };
