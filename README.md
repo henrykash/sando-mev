@@ -73,6 +73,32 @@ Live submission stays off until **all** of: `DRY_RUN=false`, `PRIVATE_KEY` set
 but never submits. Validate edge in monitoring mode first —
 see `docs/PROFITABILITY_ANALYSIS.md` and `docs/MEV_SHARE_RESEARCH.md`.
 
+# strategies 🎛️
+Each runner is **listen-only** (alerts, never submits). Pick one to test a
+strategy:
+
+| Command | Strategy | Needs |
+|---|---|---|
+| `npm run mevblocker:validate` | Backrun-arb off **MEV Blocker** private orderflow (V2 hit pool ↔ V2/V3 venues) | `RPC_URL` |
+| `npm run mevshare:validate` | Backrun-arb off **Flashbots MEV-Share** hints | `RPC_URL` |
+| `npm start` | **Sandwich** on the public mempool (all pairs, V2 + V3 detect) | `RPC_URL` + pending-tx `WSS_URL` |
+| `npm run backtest [data.json]` | **Historical replay** of the sandwich profit logic | none (sample) |
+
+Run both backrun sources in one process:
+```bash
+MEVSHARE_ALSO=true npm run mevblocker:validate
+```
+
+Tuning knobs (`.env`):
+- `ARB_MIN_PROFIT_ETH` (default `0.005`) / `ARB_MAX_IN_ETH` (default `50`) — backrun threshold & cycle size
+- `V2_VENUES_EXTRA="name:factory,…"` — add more V2 venues
+- `MIN_MARGIN_ETH` / `MAX_FRONTRUN_ETH` — sandwich margin & size
+
+Recommended test: `npm run telegram:test` to confirm alerts, then leave
+`MEVSHARE_ALSO=true npm run mevblocker:validate` running for a week and compare
+its candidate count against `npm start`. That tells you which strategy actually
+surfaces edge for you before any capital is involved.
+
 # backtesting 📊
 Estimate edge before risking capital by replaying historical victim swaps
 through the same optimal-input + net-profit logic the live bot uses:
